@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Veloces — Online Test & Coding Platform</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="bg"></div>
+<header><div class="brand"><img src="https://velocescampus.com/wp-content/uploads/2025/02/veloces_logo@0.1x@0.75x-1.png" alt="Veloces"></div><button id="logout" class="ghost hidden">Logout</button></header>
+<main>
+<section id="login" class="card auth">
+  <div class="auth-copy"><span class="pill">VELOСES</span><h1>Online Test & Coding Platform</h1><p>Secure exams, coding assessments, monitoring, results and campus management.</p></div>
+  <form id="loginForm">
+    <label>Account type<select id="role"><option value="STUDENT">Student</option><option value="ADMIN">Admin</option></select></label>
+    <label>Email<input id="email" type="email" required></label>
+    <label>Password<input id="password" type="password" required></label>
+    <label class="check"><input id="remember" type="checkbox"> Remember me</label>
+    <button>Login</button><p id="loginMsg" class="msg"></p>
+  </form>
+  <details><summary>New student? Sign up</summary><form id="signupForm" class="mini">
+    <input id="suName" placeholder="Full name" required><input id="suEmail" type="email" placeholder="Email" required><input id="suPassword" type="password" placeholder="Password" required><button>Create student account</button>
+  </form></details>
+</section>
+
+<section id="app" class="hidden">
+<nav class="tabs"><button data-page="dashboard">Dashboard</button><button data-page="exams">Exams</button><button data-page="results">Results</button><button data-page="attendance">Attendance</button><button data-page="timetable">Timetable</button><button data-page="announcements">Announcements</button><button data-page="feedback">Feedback</button><button data-page="admins" class="adminOnly">Admins</button></nav>
+<div id="page"></div>
+</section>
+</main>
+<script src="/app.js"></script>
+</body></html>
