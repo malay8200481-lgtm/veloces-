@@ -1,0 +1,559 @@
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const mysql = require("mysql2/promise");
+
+async function main() {
+  const required = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length) throw new Error(`Missing database environment variables: ${missing.join(", ")}`);
+
+  const db = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    multipleStatements: true
+  });
+
+  const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
+  await db.query(schema);
+  await db.end();
+  console.log("Veloces database schema initialized successfully.");
+}
+
+main().catch((err) => {
+  console.error("Database initialization failed:", err.message);
+  process.exit(1);
+});
+
+{
+  "name": "veloces-online-test-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Veloces online test and coding assessment platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:init": "node init-db.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.3"
+  }
+}
+
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "startCommand": "npm start",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+
+# Veloces — Online Test & Coding Assessment Platform
+
+A new full-stack Veloces project using:
+- Node.js + Express API
+- MySQL
+- JWT in an HTTP-only cookie
+- Responsive HTML/CSS/JS frontend
+- Admin + Student roles
+- Multiple admin accounts
+- Exams, MCQ questions, coding-question editor area
+- Results
+- Attendance
+- Timetable
+- Announcements
+- Feedback
+- Exam violation logging
+
+## Run locally
+
+1. Install Node.js 18+ and MySQL 8+.
+2. Create the database:
+   `mysql -u root -p < schema.sql`
+3. Copy `.env.example` to `.env` and fill in your MySQL credentials and JWT secret.
+4. Install packages:
+   `npm install`
+5. Seed the first admin:
+   `node seed.js`
+6. Start:
+   `npm start`
+7. Open:
+   `http://localhost:3000`
+
+Initial seed admin:
+- email: admin@veloces.local
+- password: ChangeMe123!
+Change the account password implementation before production use; the current admin-management flow intentionally does not expose password editing.
+
+## Important production notes
+
+- The feedback endpoint stores feedback; connect it to an authenticated SMTP/transactional-email provider to actually send mail from the registered account to the HOD. Do not spoof a student's From address through arbitrary SMTP headers.
+- The coding editor UI is included, but arbitrary code execution is not enabled in this starter. A production compiler should run code inside isolated containers/sandboxes with strict CPU, memory, process, filesystem, network and time limits.
+- Camera/microphone permissions and fullscreen/visibility events are browser-controlled. The platform logs violations, but no browser can guarantee that a student physically cannot leave a device.
+- For real deployment, use HTTPS, rotate JWT secrets, add CSRF protection where appropriate, rate limiting, audit logging, backups, secure file storage, and a proper email provider.
+
+## Railway deployment
+
+1. Add a Railway MySQL service.
+2. On the app service, set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` to the Railway MySQL variables.
+3. Set `NODE_ENV=production`, `JWT_SECRET`, `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`.
+4. Deploy this repository.
+5. Open the app service Console and run `npm run db:init`.
+6. Run `npm run seed`.
+7. In Settings/Networking, generate a public domain.
+
+The schema is safe to run repeatedly because tables use `CREATE TABLE IF NOT EXISTS`.
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  email VARCHAR(190) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('ADMIN','STUDENT') NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS announcements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  body TEXT NOT NULL,
+  attachment_url VARCHAR(500),
+  created_by INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS timetable (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  lecture_date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  lecture_name VARCHAR(200) NOT NULL,
+  lecturer_name VARCHAR(150) NOT NULL,
+  cancelled BOOLEAN DEFAULT FALSE,
+  created_by INT NOT NULL,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS attendance (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id INT NOT NULL,
+  attendance_date DATE NOT NULL,
+  status ENUM('PRESENT','ABSENT') NOT NULL,
+  marked_by INT NOT NULL,
+  UNIQUE KEY uq_attendance (student_id, attendance_date),
+  FOREIGN KEY (student_id) REFERENCES users(id),
+  FOREIGN KEY (marked_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS exams (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  difficulty ENUM('EASY','MEDIUM','HARD') NOT NULL,
+  duration_minutes INT NOT NULL,
+  starts_at DATETIME NULL,
+  ends_at DATETIME NULL,
+  coding_enabled BOOLEAN DEFAULT FALSE,
+  published BOOLEAN DEFAULT FALSE,
+  created_by INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  exam_id INT NOT NULL,
+  question_text TEXT NOT NULL,
+  type ENUM('MCQ','CODING') NOT NULL,
+  difficulty ENUM('EASY','MEDIUM','HARD') NOT NULL,
+  options_json JSON NULL,
+  correct_answer VARCHAR(500) NULL,
+  points INT DEFAULT 1,
+  sort_order INT DEFAULT 0,
+  FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_cases (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  question_id INT NOT NULL,
+  input_text TEXT,
+  expected_output TEXT,
+  FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS submissions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  exam_id INT NOT NULL,
+  student_id INT NOT NULL,
+  score DECIMAL(10,2) DEFAULT 0,
+  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  submitted_at DATETIME NULL,
+  status ENUM('IN_PROGRESS','SUBMITTED','DISQUALIFIED') DEFAULT 'IN_PROGRESS',
+  UNIQUE KEY uq_exam_student (exam_id, student_id),
+  FOREIGN KEY (exam_id) REFERENCES exams(id),
+  FOREIGN KEY (student_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS answers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  submission_id INT NOT NULL,
+  question_id INT NOT NULL,
+  answer_text LONGTEXT,
+  is_correct BOOLEAN NULL,
+  points_awarded DECIMAL(10,2) DEFAULT 0,
+  FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES questions(id)
+);
+
+CREATE TABLE IF NOT EXISTS violations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  submission_id INT NOT NULL,
+  type VARCHAR(80) NOT NULL,
+  details VARCHAR(500),
+  severity ENUM('LOW','MEDIUM','HIGH') DEFAULT 'LOW',
+  occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id INT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_id) REFERENCES users(id)
+);
+
+-- Initial admin is created by the setup endpoint/seed script, not by storing a plaintext password here.
+
+require("dotenv").config();
+const mysql = require("mysql2/promise");
+const bcrypt = require("bcryptjs");
+
+(async () => {
+  const required = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "ADMIN_EMAIL", "ADMIN_PASSWORD"];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length) throw new Error(`Missing environment variables: ${missing.join(", ")}`);
+
+  const db = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+  });
+
+  const email = process.env.ADMIN_EMAIL.toLowerCase();
+  const name = process.env.ADMIN_NAME || "Veloces Administrator";
+  const password = process.env.ADMIN_PASSWORD;
+  const hash = await bcrypt.hash(password, 12);
+
+  const [existing] = await db.execute("SELECT id FROM users WHERE email=?", [email]);
+  if (existing.length) {
+    await db.execute("UPDATE users SET name=?, password_hash=?, role='ADMIN' WHERE id=?", [name, hash, existing[0].id]);
+    console.log(`Admin account updated: ${email}`);
+  } else {
+    await db.execute("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'ADMIN')", [name, email, hash]);
+    console.log(`Admin account created: ${email}`);
+  }
+
+  await db.end();
+})().catch((err) => {
+  console.error("Admin seed failed:", err.message);
+  process.exit(1);
+});
+
+require("dotenv").config();
+const express = require("express");
+const cookieParser = require("cookie-parser");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const mysql = require("mysql2/promise");
+const path = require("path");
+
+const app = express();
+app.use(express.json({ limit: "2mb" }));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, "public")));
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST, port: process.env.DB_PORT || 3306,
+  user: process.env.DB_USER, password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME, connectionLimit: 10
+});
+
+function tokenFor(user) {
+  return jwt.sign({ id: user.id, role: user.role, email: user.email },
+    process.env.JWT_SECRET, { expiresIn: "8h" });
+}
+function auth(req,res,next) {
+  try {
+    const raw = req.cookies.veloces_token || (req.headers.authorization||"").replace("Bearer ","");
+    req.user = jwt.verify(raw, process.env.JWT_SECRET);
+    next();
+  } catch { res.status(401).json({error:"Authentication required"}); }
+}
+function admin(req,res,next) {
+  if (req.user.role !== "ADMIN") return res.status(403).json({error:"Admin access required"});
+  next();
+}
+
+app.get("/api/health", async (_req,res) => {
+  try { await pool.query("SELECT 1"); res.json({ok:true, database:true}); }
+  catch(e){ res.status(503).json({ok:false, database:false}); }
+});
+
+app.post("/api/auth/register", async (req,res) => {
+  const {name,email,password,role="STUDENT"} = req.body;
+  if (!name || !email || !password) return res.status(400).json({error:"Name, email and password are required"});
+  const safeRole = role === "ADMIN" ? "ADMIN" : "STUDENT";
+  if (safeRole === "ADMIN") return res.status(403).json({error:"Admin accounts can only be created by an existing admin"});
+  try {
+    const [exists] = await pool.execute("SELECT id FROM users WHERE email=?", [email.toLowerCase()]);
+    if (exists.length) return res.status(409).json({error:"Email is already registered"});
+    const hash = await bcrypt.hash(password,12);
+    const [r] = await pool.execute("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'STUDENT')",
+      [name,email.toLowerCase(),hash]);
+    res.json({id:r.insertId,message:"Student account created"});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+app.post("/api/auth/login", async (req,res) => {
+  const {email,password,role} = req.body;
+  const [rows] = await pool.execute("SELECT * FROM users WHERE email=?", [String(email||"").toLowerCase()]);
+  const user = rows[0];
+  if (!user || !(await bcrypt.compare(password||"",user.password_hash)) || user.role !== role)
+    return res.status(401).json({error:"Invalid email, password, or account type"});
+  res.cookie("veloces_token", tokenFor(user), {httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",maxAge:8*60*60*1000});
+  res.json({user:{id:user.id,name:user.name,email:user.email,role:user.role}});
+});
+app.post("/api/auth/logout",(req,res)=>{res.clearCookie("veloces_token");res.json({ok:true});});
+app.get("/api/auth/me",auth,async(req,res)=>{
+  const [r]=await pool.execute("SELECT id,name,email,role,created_at FROM users WHERE id=?",[req.user.id]);
+  res.json(r[0]);
+});
+
+app.get("/api/admins",auth,admin,async(_req,res)=>{
+  const [r]=await pool.query("SELECT id,name,email,created_at FROM users WHERE role='ADMIN' ORDER BY created_at");
+  res.json(r);
+});
+app.post("/api/admins",auth,admin,async(req,res)=>{
+  const {name,email,password}=req.body;
+  if(!name||!email||!password) return res.status(400).json({error:"All fields are required"});
+  try{
+    const [e]=await pool.execute("SELECT id FROM users WHERE email=?",[email.toLowerCase()]);
+    if(e.length)return res.status(409).json({error:"Email already exists"});
+    const hash=await bcrypt.hash(password,12);
+    const [r]=await pool.execute("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'ADMIN')",[name,email.toLowerCase(),hash]);
+    res.json({id:r.insertId});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+app.delete("/api/admins/:id",auth,admin,async(req,res)=>{
+  if(Number(req.params.id)===req.user.id)return res.status(400).json({error:"You cannot delete your own admin account"});
+  await pool.execute("DELETE FROM users WHERE id=? AND role='ADMIN'",[req.params.id]);
+  res.json({ok:true});
+});
+
+app.get("/api/students",auth,admin,async(_req,res)=>{
+  const [r]=await pool.query("SELECT id,name,email,created_at FROM users WHERE role='STUDENT' ORDER BY created_at DESC");
+  res.json(r);
+});
+
+app.get("/api/announcements",auth,async(_req,res)=>{
+  const [r]=await pool.query("SELECT a.*,u.name AS created_by_name FROM announcements a JOIN users u ON u.id=a.created_by ORDER BY a.created_at DESC");
+  res.json(r);
+});
+app.post("/api/announcements",auth,admin,async(req,res)=>{
+  const {title,body,attachment_url}=req.body;
+  const [r]=await pool.execute("INSERT INTO announcements(title,body,attachment_url,created_by) VALUES(?,?,?,?)",
+    [title,body,attachment_url||null,req.user.id]);
+  res.json({id:r.insertId});
+});
+app.delete("/api/announcements/:id",auth,admin,async(req,res)=>{
+  await pool.execute("DELETE FROM announcements WHERE id=?",[req.params.id]); res.json({ok:true});
+});
+
+app.get("/api/timetable",auth,async(_req,res)=>{
+  const [r]=await pool.query("SELECT * FROM timetable ORDER BY lecture_date,start_time");
+  res.json(r);
+});
+app.post("/api/timetable",auth,admin,async(req,res)=>{
+  const {lecture_date,start_time,end_time,lecture_name,lecturer_name,cancelled=false}=req.body;
+  const [r]=await pool.execute("INSERT INTO timetable(lecture_date,start_time,end_time,lecture_name,lecturer_name,cancelled,created_by) VALUES(?,?,?,?,?,?,?)",
+    [lecture_date,start_time,end_time,lecture_name,lecturer_name,!!cancelled,req.user.id]);
+  res.json({id:r.insertId});
+});
+app.delete("/api/timetable/:id",auth,admin,async(req,res)=>{
+  await pool.execute("DELETE FROM timetable WHERE id=?",[req.params.id]);res.json({ok:true});
+});
+
+app.get("/api/attendance",auth,async(req,res)=>{
+  if(req.user.role==="ADMIN"){
+    const [r]=await pool.query("SELECT a.*,u.name,u.email FROM attendance a JOIN users u ON u.id=a.student_id ORDER BY attendance_date DESC,u.name");
+    return res.json(r);
+  }
+  const [r]=await pool.execute("SELECT * FROM attendance WHERE student_id=? ORDER BY attendance_date DESC",[req.user.id]);
+  res.json(r);
+});
+app.post("/api/attendance",auth,admin,async(req,res)=>{
+  const {student_id,attendance_date,status}=req.body;
+  await pool.execute(
+    "INSERT INTO attendance(student_id,attendance_date,status,marked_by) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),marked_by=VALUES(marked_by)",
+    [student_id,attendance_date,status,req.user.id]
+  );
+  res.json({ok:true});
+});
+
+app.get("/api/exams",auth,async(req,res)=>{
+  const sql=req.user.role==="ADMIN" ? "SELECT * FROM exams ORDER BY created_at DESC" : "SELECT id,title,description,difficulty,duration_minutes,starts_at,ends_at,coding_enabled FROM exams WHERE published=1 ORDER BY created_at DESC";
+  const [r]=await pool.query(sql);res.json(r);
+});
+app.post("/api/exams",auth,admin,async(req,res)=>{
+  const {title,description,difficulty,duration_minutes,starts_at,ends_at,coding_enabled=false,published=false}=req.body;
+  const [r]=await pool.execute("INSERT INTO exams(title,description,difficulty,duration_minutes,starts_at,ends_at,coding_enabled,published,created_by) VALUES(?,?,?,?,?,?,?,?,?)",
+    [title,description||"",difficulty,duration_minutes,starts_at||null,ends_at||null,!!coding_enabled,!!published,req.user.id]);
+  res.json({id:r.insertId});
+});
+app.post("/api/exams/:id/questions",auth,admin,async(req,res)=>{
+  const {question_text,type,difficulty,options,correct_answer,points=1,sort_order=0,test_cases=[]}=req.body;
+  const [r]=await pool.execute("INSERT INTO questions(exam_id,question_text,type,difficulty,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?,?)",
+    [req.params.id,question_text,type,difficulty,options?JSON.stringify(options):null,correct_answer||null,points,sort_order]);
+  for(const tc of test_cases) await pool.execute("INSERT INTO test_cases(question_id,input_text,expected_output) VALUES(?,?,?)",[r.insertId,tc.input_text||"",tc.expected_output||""]);
+  res.json({id:r.insertId});
+});
+app.get("/api/exams/:id/questions",auth,async(req,res)=>{
+  const [r]=await pool.execute("SELECT id,exam_id,question_text,type,difficulty,options_json,points,sort_order FROM questions WHERE exam_id=? ORDER BY sort_order,id",[req.params.id]);
+  res.json(r.map(x=>({...x,options_json:x.options_json?JSON.parse(x.options_json):null})));
+});
+
+app.post("/api/exams/:id/start",auth,async(req,res)=>{
+  if(req.user.role!=="STUDENT")return res.status(403).json({error:"Students only"});
+  try{
+    const [r]=await pool.execute("INSERT INTO submissions(exam_id,student_id) VALUES(?,?)",[req.params.id,req.user.id]);
+    res.json({submission_id:r.insertId});
+  }catch(e){
+    const [r]=await pool.execute("SELECT id,status FROM submissions WHERE exam_id=? AND student_id=?",[req.params.id,req.user.id]);
+    res.json({submission_id:r[0]?.id,status:r[0]?.status});
+  }
+});
+app.post("/api/submissions/:id/answer",auth,async(req,res)=>{
+  const {question_id,answer_text}=req.body;
+  const [s]=await pool.execute("SELECT * FROM submissions WHERE id=?",[req.params.id]);
+  if(!s[0]||s[0].student_id!==req.user.id||s[0].status!=="IN_PROGRESS")return res.status(403).json({error:"Invalid submission"});
+  const [q]=await pool.execute("SELECT * FROM questions WHERE id=?",[question_id]);
+  const question=q[0];
+  let correct=null, points=0;
+  if(question.type==="MCQ"){
+    correct=String(answer_text||"")===String(question.correct_answer||"");
+    points=correct?question.points:0;
+  }
+  await pool.execute("INSERT INTO answers(submission_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)",
+    [req.params.id,question_id,answer_text||"",correct,points]);
+  res.json({ok:true,correct,points});
+});
+app.post("/api/submissions/:id/violation",auth,async(req,res)=>{
+  const [s]=await pool.execute("SELECT student_id FROM submissions WHERE id=?",[req.params.id]);
+  if(!s[0]||s[0].student_id!==req.user.id)return res.status(403).json({error:"Invalid submission"});
+  const {type,details,severity="LOW"}=req.body;
+  await pool.execute("INSERT INTO violations(submission_id,type,details,severity) VALUES(?,?,?,?)",[req.params.id,type,details||"",severity]);
+  res.json({ok:true});
+});
+app.post("/api/submissions/:id/submit",auth,async(req,res)=>{
+  const [s]=await pool.execute("SELECT * FROM submissions WHERE id=? AND student_id=?",[req.params.id,req.user.id]);
+  if(!s[0])return res.status(404).json({error:"Submission not found"});
+  const [sum]=await pool.execute("SELECT COALESCE(SUM(points_awarded),0) score FROM answers WHERE submission_id=?",[req.params.id]);
+  await pool.execute("UPDATE submissions SET score=?,submitted_at=NOW(),status='SUBMITTED' WHERE id=?",[sum[0].score,req.params.id]);
+  res.json({score:sum[0].score});
+});
+app.get("/api/results",auth,async(req,res)=>{
+  const [r]=await pool.execute(
+    `SELECT s.id,s.exam_id,e.title,s.student_id,u.name,u.email,s.score,s.status,s.started_at,s.submitted_at
+     FROM submissions s JOIN exams e ON e.id=s.exam_id JOIN users u ON u.id=s.student_id
+     ${req.user.role==="STUDENT"?"WHERE s.student_id=?":""} ORDER BY s.submitted_at DESC`,
+    req.user.role==="STUDENT"?[req.user.id]:[]);
+  res.json(r);
+});
+
+app.post("/api/feedback",auth,async(req,res)=>{
+  const {message}=req.body;
+  if(!message)return res.status(400).json({error:"Message required"});
+  await pool.execute("INSERT INTO feedback(student_id,message) VALUES(?,?)",[req.user.id,message]);
+  // Production email delivery should be wired to SMTP/transactional mail provider using HOD_EMAIL.
+  res.json({ok:true,message:"Feedback recorded for HOD delivery"});
+});
+app.get("/api/feedback",auth,admin,async(_req,res)=>{
+  const [r]=await pool.query("SELECT f.*,u.name,u.email FROM feedback f JOIN users u ON u.id=f.student_id ORDER BY f.created_at DESC");
+  res.json(r);
+});
+
+app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+app.listen(process.env.PORT||3000,()=>console.log(`Veloces running on http://localhost:${process.env.PORT||3000}`));
+
+PORT=3000
+JWT_SECRET=replace-with-a-long-random-secret
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=veloces
+HOD_EMAIL=malay8200481@gmail.com
+
+node_modules/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: change-root-password
+      MYSQL_DATABASE: veloces
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "3306:3306"
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PORT: 3000
+      JWT_SECRET: change-this-secret
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: change-root-password
+      DB_NAME: veloces
+      HOD_EMAIL: malay8200481@gmail.com
+    ports:
+      - "3000:3000"
+volumes:
+  mysql_data:
+
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
