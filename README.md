@@ -41,3 +41,4 @@ Change the account password implementation before production use; the current ad
 - The coding editor UI is included, but arbitrary code execution is not enabled in this starter. A production compiler should run code inside isolated containers/sandboxes with strict CPU, memory, process, filesystem, network and time limits.
 - Camera/microphone permissions and fullscreen/visibility events are browser-controlled. The platform logs violations, but no browser can guarantee that a student physically cannot leave a device.
 - For real deployment, use HTTPS, rotate JWT secrets, add CSRF protection where appropriate, rate limiting, audit logging, backups, secure file storage, and a proper email provider.
+Railway deployment update.
