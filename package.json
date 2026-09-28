@@ -5,9 +5,11 @@
   "description": "Veloces online test and coding assessment platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
+  "start": "node server.js",
+  "dev": "node --watch server.js",
+  "db:init": "node init-db.js",
+  "seed": "node seed.js"
+},
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
