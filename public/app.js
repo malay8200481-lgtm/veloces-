@@ -4,7 +4,30 @@ async function boot(){try{me=await api("/api/auth/me");showApp();load("dashboard
 function showLogin(){$("#login").classList.remove("hidden");$("#app").classList.add("hidden");$("#logout").classList.add("hidden")}
 function showApp(){$("#login").classList.add("hidden");$("#app").classList.remove("hidden");$("#logout").classList.remove("hidden");document.querySelectorAll(".adminOnly").forEach(x=>x.style.display=me.role==="ADMIN"?"":"none")}
 $("#loginForm").onsubmit=async e=>{e.preventDefault();try{me=(await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("#email").value,password:$("#password").value,role:$("#role").value})})).user;showApp();load("dashboard")}catch(x){$("#loginMsg").textContent=x.message}};
-$("#signupForm").onsubmit=async e=>{e.preventDefault();try{await api("/api/auth/register",{method:"POST",body:JSON.stringify({name:$("#suName").value,email:$("#suEmail").value,password:$("#suPassword").value})});e.target.reset();alert("Student account created. You can now log in.")}catch(x){alert(x.message)}};
+$("#signupForm").onsubmit=async e=>{
+  e.preventDefault();
+
+  try{
+    const d=await api("/api/auth/register",{
+      method:"POST",
+      body:JSON.stringify({
+        name:$("#suName").value,
+        email:$("#suEmail").value,
+        password:$("#suPassword").value
+      })
+    });
+
+    if(d.requiresOtp){
+      $("#otpEmail").value=d.email;
+      $("#signupOtp").classList.remove("hidden");
+      $("#signupForm").classList.add("hidden");
+      $("#otpCode").focus();
+    }
+
+  }catch(x){
+    alert(x.message);
+  }
+};
 $("#logout").onclick=async()=>{await api("/api/auth/logout",{method:"POST"});showLogin()};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>load(b.dataset.page));
 async function load(page){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.page===page)); const p=$("#page"); p.innerHTML='<div class="card panel">Loading…</div>'; try{
