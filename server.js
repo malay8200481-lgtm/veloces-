@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const mysql = require("mysql2/promise");
 const path = require("path");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
