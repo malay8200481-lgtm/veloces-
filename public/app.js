@@ -89,14 +89,22 @@ async function exams(p){
         </div>
 
         <div class="row">
-          ${
-            me.role==="ADMIN"
-            ? `<span class="badge">
-                ${x.published?"PUBLISHED":"DRAFT"}
-              </span>
-              <button onclick="openExamBuilder(${x.id})">
-                ${x.published?"View":"Edit"}
-              </button>`
+         ${me.role==="ADMIN"
+  ? `<span class="badge">
+      ${x.published?"PUBLISHED":"DRAFT"}
+    </span>
+
+    <button onclick="openExamBuilder(${x.id})">
+      ${x.published?"View":"Edit"}
+    </button>
+
+    ${
+      !x.published
+      ? `<button class="danger" onclick="deleteExam(${x.id})">
+          Delete
+        </button>`
+      : ""
+    }`
             : `<button onclick="startExam(${x.id})">Start</button>`
           }
         </div>
