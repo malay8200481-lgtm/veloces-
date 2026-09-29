@@ -121,4 +121,20 @@ CREATE TABLE feedback (
   FOREIGN KEY (student_id) REFERENCES users(id)
 );
 
+CREATE TABLE otp_codes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  name VARCHAR(120) NULL,
+  email VARCHAR(190) NOT NULL,
+  password_hash VARCHAR(255) NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  purpose ENUM('REGISTER','LOGIN') NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  used BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_otp_email (email),
+  INDEX idx_otp_expires (expires_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 -- Initial admin is created by the setup endpoint/seed script, not by storing a plaintext password here.
