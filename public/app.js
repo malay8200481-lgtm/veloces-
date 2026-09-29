@@ -28,6 +28,29 @@ $("#signupForm").onsubmit=async e=>{
     alert(x.message);
   }
 };
+$("#signupOtp").onsubmit=async e=>{
+  e.preventDefault();
+
+  try{
+    const d=await api("/api/auth/verify-register",{
+      method:"POST",
+      body:JSON.stringify({
+        email:$("#otpEmail").value,
+        otp:$("#otpCode").value.trim()
+      })
+    });
+
+    me=d.user;
+    $("#signupOtp").reset();
+    $("#signupOtp").classList.add("hidden");
+    $("#signupForm").classList.remove("hidden");
+    showApp();
+    load("dashboard");
+
+  }catch(x){
+    $("#otpMsg").textContent=x.message;
+  }
+};
 $("#logout").onclick=async()=>{await api("/api/auth/logout",{method:"POST"});showLogin()};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>load(b.dataset.page));
 async function load(page){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.page===page)); const p=$("#page"); p.innerHTML='<div class="card panel">Loading…</div>'; try{
