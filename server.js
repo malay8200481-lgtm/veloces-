@@ -130,6 +130,82 @@ app.post("/api/auth/register", async (req,res)=>{
     res.status(500).json({error:"Registration failed"});
   }
 });
+app.post("/api/auth/verify-register", async (req,res)=>{
+  const {email,otp}=req.body;
+
+  if(!email||!otp){
+    return res.status(400).json({error:"Email and OTP are required"});
+  }
+
+  const normalizedEmail=email.trim().toLowerCase();
+
+  try {
+    const [rows]=await pool.query(
+      `SELECT * FROM otp_codes
+       WHERE email=? AND purpose='REGISTER' AND used=0
+       ORDER BY id DESC LIMIT 1`,
+      [normalizedEmail]
+    );
+
+    if(!rows.length){
+      return res.status(400).json({error:"No active verification code found"});
+    }
+
+    const record=rows[0];
+
+    if(new Date(record.expires_at)<new Date()){
+      return res.status(400).json({error:"OTP has expired. Please request a new one."});
+    }
+
+    if(record.attempts>=5){
+      return res.status(429).json({error:"Too many incorrect attempts. Please request a new OTP."});
+    }
+
+    const valid=hashOtp(String(otp))===record.otp_hash;
+
+    if(!valid){
+      await pool.query(
+        "UPDATE otp_codes SET attempts=attempts+1 WHERE id=?",
+        [record.id]
+      );
+      return res.status(401).json({error:"Invalid OTP"});
+    }
+
+    const [result]=await pool.query(
+      `INSERT INTO users (name,email,password_hash,role)
+       VALUES (?,?,?,'STUDENT')`,
+      [record.name,record.email,record.password_hash]
+    );
+
+    await pool.query(
+      "UPDATE otp_codes SET used=1,user_id=? WHERE id=?",
+      [result.insertId,record.id]
+    );
+
+    const user={
+      id:result.insertId,
+      name:record.name,
+      email:record.email,
+      role:"STUDENT"
+    };
+
+    res.cookie(
+      "veloces_token",
+      tokenFor(user),
+      {
+        httpOnly:true,
+        sameSite:"lax",
+        secure:process.env.NODE_ENV==="production"
+      }
+    );
+
+    res.json({user});
+
+  } catch(e) {
+    console.error("Registration OTP verification error:",e);
+    res.status(500).json({error:"OTP verification failed"});
+  }
+});
 app.post("/api/auth/login", async (req,res) => {
   const {email,password,role} = req.body;
   const [rows] = await pool.execute("SELECT * FROM users WHERE email=?", [String(email||"").toLowerCase()]);
