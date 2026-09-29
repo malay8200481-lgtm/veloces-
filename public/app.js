@@ -57,8 +57,359 @@ async function load(page){document.querySelectorAll(".tabs button").forEach(b=>b
 if(page==="dashboard")return dashboard(p); if(page==="exams")return exams(p); if(page==="results")return results(p); if(page==="attendance")return attendance(p); if(page==="timetable")return timetable(p); if(page==="announcements")return announcements(p); if(page==="feedback")return feedback(p); if(page==="admins")return admins(p);
 }catch(e){p.innerHTML=`<div class="card panel">${e.message}</div>`}}
 async function dashboard(p){const [ex,res,an]=await Promise.all([api("/api/exams"),api("/api/results"),api("/api/announcements")]);p.innerHTML=`<div class="grid"><div class="stat"><span>Available/created exams</span><br><b>${ex.length}</b></div><div class="stat"><span>${me.role==="ADMIN"?"Submissions":"My submissions"}</span><br><b>${res.length}</b></div><div class="stat"><span>Announcements</span><br><b>${an.length}</b></div></div><div class="card panel" style="margin-top:15px"><h2>Welcome, ${me.name}</h2><p class="muted">Veloces control center for online tests, coding assessments and campus management.</p></div>`}
-async function exams(p){const ex=await api("/api/exams");let h=`<div class="card panel"><div class="row"><h2>Exams</h2>${me.role==="ADMIN"?'<button onclick="newExam()">+ Create exam</button>':""}</div><div class="list">`;for(const x of ex)h+=`<div class="item row"><div><b>${x.title}</b><div class="muted">${x.difficulty} · ${x.duration_minutes} min ${x.coding_enabled?"· Coding":""}</div></div>${me.role==="STUDENT"?`<button onclick="startExam(${x.id})">Start</button>`:`<span class="badge">${x.published?"PUBLISHED":"DRAFT"}</span>`}</div>`;p.innerHTML=h+"</div>"}
-window.newExam=async()=>{const title=prompt("Exam title");if(!title)return;const difficulty=(prompt("Difficulty: EASY / MEDIUM / HARD","MEDIUM")||"MEDIUM").toUpperCase();const duration=Number(prompt("Duration in minutes","60"));await api("/api/exams",{method:"POST",body:JSON.stringify({title,difficulty,duration_minutes:duration,coding_enabled:false,published:false})});load("exams")};
+async function exams(p){
+  const ex=await api("/api/exams");
+
+  let h=`
+    <div class="card panel">
+      <div class="row">
+        <h2>Exams</h2>
+        ${me.role==="ADMIN"
+          ? `<button onclick="newExam()">+ Create Exam</button>`
+          : ""}
+      </div>
+
+      <div class="list">
+  `;
+
+  if(!ex.length){
+    h+=`<div class="item muted">No exams created yet.</div>`;
+  }
+
+  for(const x of ex){
+    h+=`
+      <div class="item row">
+        <div>
+          <b>${esc(x.title)}</b>
+          <div class="muted">
+            ${esc(x.difficulty||"MEDIUM")}
+            · ${x.duration_minutes} min
+            ${x.coding_enabled?"· Coding":""}
+          </div>
+        </div>
+
+        <div class="row">
+          ${
+            me.role==="ADMIN"
+            ? `<span class="badge">
+                ${x.published?"PUBLISHED":"DRAFT"}
+              </span>
+              <button onclick="openExamBuilder(${x.id})">
+                ${x.published?"View":"Edit"}
+              </button>`
+            : `<button onclick="startExam(${x.id})">Start</button>`
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  h+=`
+      </div>
+    </div>
+  `;
+
+  p.innerHTML=h;
+}
+
+
+function esc(v){
+  return String(v??"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+
+window.newExam=async()=>{
+  if(me.role!=="ADMIN")return;
+
+  const choice=prompt(
+`Create Exam
+
+Type 1 for Manual Exam
+Type 2 for AI Generated Exam`,
+    "1"
+  );
+
+  if(choice==="2"){
+    alert("AI Exam Generator will be added in the next step.");
+    return;
+  }
+
+  if(choice!=="1")return;
+
+  const title=prompt("Exam title");
+  if(!title)return;
+
+  const description=prompt("Exam description","");
+
+  const difficulty=(
+    prompt(
+      "Difficulty: EASY / MEDIUM / HARD",
+      "MEDIUM"
+    )||"MEDIUM"
+  ).toUpperCase();
+
+  const duration=Number(
+    prompt("Duration in minutes","60")
+  );
+
+  if(!duration || duration<1){
+    alert("Please enter a valid duration.");
+    return;
+  }
+
+  const result=await api("/api/exams",{
+    method:"POST",
+    body:JSON.stringify({
+      title,
+      description,
+      difficulty,
+      duration_minutes:duration,
+      coding_enabled:false,
+      published:false
+    })
+  });
+
+  await openExamBuilder(result.id);
+};
+
+
+window.openExamBuilder=async(id)=>{
+  const p=$("#page");
+
+  const ex=await api("/api/exams");
+  const exam=ex.find(x=>Number(x.id)===Number(id));
+
+  if(!exam){
+    alert("Exam not found.");
+    return;
+  }
+
+  const questions=await api(`/api/exams/${id}/questions`);
+
+  let h=`
+    <div class="card panel">
+
+      <div class="row">
+        <div>
+          <h2>${esc(exam.title)}</h2>
+          <div class="muted">
+            ${esc(exam.difficulty)}
+            · ${exam.duration_minutes} minutes
+          </div>
+        </div>
+
+        <button onclick="load('exams')">← Back</button>
+      </div>
+
+      <hr>
+
+      <h3>Questions</h3>
+
+      <div class="list">
+  `;
+
+  if(!questions.length){
+    h+=`
+      <div class="item muted">
+        No questions yet. Add your first question below.
+      </div>
+    `;
+  }
+
+  questions.forEach((q,i)=>{
+    h+=`
+      <div class="item">
+        <b>Q${i+1}. ${esc(q.question_text)}</b>
+
+        <div class="muted">
+          ${esc(q.type)}
+          · ${esc(q.difficulty||"MEDIUM")}
+          · ${q.points} point(s)
+        </div>
+
+        ${
+          q.options_json
+          ? `<div class="muted">
+              Options: ${q.options_json.map(esc).join(" | ")}
+             </div>`
+          : ""
+        }
+      </div>
+    `;
+  });
+
+  h+=`
+      </div>
+
+      <hr>
+
+      <h3>Add Question</h3>
+
+      <label>Question</label>
+      <textarea id="qbText" rows="4"
+        placeholder="Enter your question"></textarea>
+
+      <label>Type</label>
+      <select id="qbType" onchange="toggleQuestionType()">
+        <option value="MCQ">MCQ</option>
+        <option value="CODING">Coding</option>
+      </select>
+
+      <label>Difficulty</label>
+      <select id="qbDifficulty">
+        <option value="EASY">Easy</option>
+        <option value="MEDIUM" selected>Medium</option>
+        <option value="HARD">Hard</option>
+      </select>
+
+      <label>Points</label>
+      <input id="qbPoints" type="number" value="1" min="1">
+
+      <div id="mcqFields">
+
+        <label>Option A</label>
+        <input id="optA" placeholder="Option A">
+
+        <label>Option B</label>
+        <input id="optB" placeholder="Option B">
+
+        <label>Option C</label>
+        <input id="optC" placeholder="Option C">
+
+        <label>Option D</label>
+        <input id="optD" placeholder="Option D">
+
+        <label>Correct Answer</label>
+        <select id="correctAnswer">
+          <option value="">Select correct option</option>
+          <option value="A">Option A</option>
+          <option value="B">Option B</option>
+          <option value="C">Option C</option>
+          <option value="D">Option D</option>
+        </select>
+
+      </div>
+
+      <div id="codingFields" class="hidden">
+
+        <label>Test Case Input</label>
+        <textarea id="testInput" rows="3"
+          placeholder="Example input"></textarea>
+
+        <label>Expected Output</label>
+        <textarea id="testOutput" rows="3"
+          placeholder="Example output"></textarea>
+
+      </div>
+
+      <br>
+
+      <button onclick="addBuilderQuestion(${id})">
+        + Add Question
+      </button>
+
+    </div>
+  `;
+
+  p.innerHTML=h;
+};
+
+
+window.toggleQuestionType=()=>{
+  const type=$("#qbType").value;
+
+  $("#mcqFields").classList.toggle(
+    "hidden",
+    type!=="MCQ"
+  );
+
+  $("#codingFields").classList.toggle(
+    "hidden",
+    type!=="CODING"
+  );
+};
+
+
+window.addBuilderQuestion=async(examId)=>{
+  const question_text=$("#qbText").value.trim();
+  const type=$("#qbType").value;
+  const difficulty=$("#qbDifficulty").value;
+  const points=Number($("#qbPoints").value||1);
+
+  if(!question_text){
+    alert("Please enter the question.");
+    return;
+  }
+
+  if(type==="MCQ"){
+
+    const options=[
+      $("#optA").value.trim(),
+      $("#optB").value.trim(),
+      $("#optC").value.trim(),
+      $("#optD").value.trim()
+    ];
+
+    if(options.some(x=>!x)){
+      alert("Please fill all four options.");
+      return;
+    }
+
+    const correct=$("#correctAnswer").value;
+
+    if(!correct){
+      alert("Please select the correct answer.");
+      return;
+    }
+
+    const correct_answer=
+      options[
+        {A:0,B:1,C:2,D:3}[correct]
+      ];
+
+    await api(`/api/exams/${examId}/questions`,{
+      method:"POST",
+      body:JSON.stringify({
+        question_text,
+        type,
+        difficulty,
+        options,
+        correct_answer,
+        points,
+        sort_order:Date.now()
+      })
+    });
+
+  }else{
+
+    const input=$("#testInput").value;
+    const output=$("#testOutput").value;
+
+    await api(`/api/exams/${examId}/questions`,{
+      method:"POST",
+      body:JSON.stringify({
+        question_text,
+        type,
+        difficulty,
+        points,
+        sort_order:Date.now(),
+        test_cases:[
+          {
+            input_text:input,
+            expected_output:output
+          }
+        ]
+      })
+    });
+  }
+
+  await openExamBuilder(examId);
+};
 window.startExam=async id=>{const s=await api(`/api/exams/${id}/start`,{method:"POST"});alert("Exam started. Submission ID: "+s.submission_id);openExam(id,s.submission_id)};
 async function openExam(id,sid){const qs=await api(`/api/exams/${id}/questions`);const m=document.createElement("div");m.className="modal";m.innerHTML=`<div><div class="row"><h2>Exam</h2><button onclick="this.closest('.modal').remove()">Close</button></div><p class="muted">Monitoring events are recorded while this session is active.</p>${qs.map((q,i)=>`<div class="question"><b>Q${i+1}. ${q.question_text}</b>${q.type==="MCQ"?(q.options_json||[]).map(o=>`<label class="option"><input type="radio" name="q${q.id}" value="${String(o).replaceAll('"','&quot;')}"> ${o}</label>`).join(""):`<textarea class="code" id="code${q.id}" placeholder="// Write your solution here"></textarea>`}<button onclick="saveAnswer(${sid},${q.id},'${q.type}')">Save answer</button></div>`).join("")}<button class="danger" onclick="submitExam(${sid})">Submit Exam</button></div>`;document.body.appendChild(m);document.documentElement.requestFullscreen?.().catch(()=>{});document.addEventListener("visibilitychange",()=>{if(document.hidden)api(`/api/submissions/${sid}/violation`,{method:"POST",body:JSON.stringify({type:"TAB_HIDDEN",severity:"HIGH",details:"Page became hidden"})}).catch(()=>{})},{once:false})}
 window.saveAnswer=async(sid,qid,type)=>{let a=type==="MCQ"?document.querySelector(`input[name="q${qid}"]:checked`)?.value:document.querySelector(`#code${qid}`).value;if(a===undefined)return alert("Select/write an answer");await api(`/api/submissions/${sid}/answer`,{method:"POST",body:JSON.stringify({question_id:qid,answer_text:a})});alert("Saved")};
