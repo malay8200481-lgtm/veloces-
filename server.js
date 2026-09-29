@@ -27,6 +27,31 @@ const mailer = nodemailer.createTransport({
     pass: process.env.SMTP_PASS
   }
 });
+function generateOtp() {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+function hashOtp(otp) {
+  return crypto.createHash("sha256").update(otp).digest("hex");
+}
+
+async function sendOtpEmail(email, otp) {
+  await mailer.sendMail({
+    from: `"${process.env.SMTP_FROM_NAME || "Veloces"}" <${process.env.SMTP_FROM}>`,
+    to: email,
+    subject: "Your Veloces verification code",
+    text: `Your Veloces verification code is ${otp}. It expires in 5 minutes.`,
+    html: `
+      <div style="font-family:Arial,sans-serif">
+        <h2>Veloces</h2>
+        <p>Your verification code is:</p>
+        <h1 style="letter-spacing:6px">${otp}</h1>
+        <p>This code expires in 5 minutes.</p>
+        <p>If you did not request this code, you can ignore this email.</p>
+      </div>
+    `
+  });
+}
 
 function tokenFor(user) {
   return jwt.sign({ id: user.id, role: user.role, email: user.email },
