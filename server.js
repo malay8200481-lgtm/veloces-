@@ -326,6 +326,53 @@ app.post("/api/exams",auth,admin,async(req,res)=>{
     [title,description||"",difficulty,duration_minutes,starts_at||null,ends_at||null,!!coding_enabled,!!published,req.user.id]);
   res.json({id:r.insertId});
 });
+app.delete("/api/exams/:id",auth,admin,async(req,res)=>{
+  const examId=req.params.id;
+
+  const [examRows]=await pool.execute(
+    "SELECT id,published FROM exams WHERE id=?",
+    [examId]
+  );
+
+  if(!examRows.length){
+    return res.status(404).json({error:"Exam not found"});
+  }
+
+  if(examRows[0].published){
+    return res.status(400).json({
+      error:"Published exams cannot be deleted"
+    });
+  }
+
+  const [questions]=await pool.execute(
+    "SELECT id FROM questions WHERE exam_id=?",
+    [examId]
+  );
+
+  for(const q of questions){
+    await pool.execute(
+      "DELETE FROM test_cases WHERE question_id=?",
+      [q.id]
+    );
+
+    await pool.execute(
+      "DELETE FROM answers WHERE question_id=?",
+      [q.id]
+    );
+  }
+
+  await pool.execute(
+    "DELETE FROM questions WHERE exam_id=?",
+    [examId]
+  );
+
+  await pool.execute(
+    "DELETE FROM exams WHERE id=?",
+    [examId]
+  );
+
+  res.json({ok:true});
+});
 app.post("/api/exams/:id/questions",auth,admin,async(req,res)=>{
   const {question_text,type,difficulty,options,correct_answer,points=1,sort_order=0,test_cases=[]}=req.body;
   const [r]=await pool.execute("INSERT INTO questions(exam_id,question_text,type,difficulty,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?,?)",
