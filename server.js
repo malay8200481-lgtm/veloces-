@@ -17,6 +17,15 @@ const pool = mysql.createPool({
   user: process.env.DB_USER, password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME, connectionLimit: 10
 });
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
 
 function tokenFor(user) {
   return jwt.sign({ id: user.id, role: user.role, email: user.email },
