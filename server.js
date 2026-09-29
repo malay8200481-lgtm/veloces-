@@ -36,23 +36,47 @@ function hashOtp(otp) {
 }
 
 async function sendOtpEmail(email, otp) {
-  await mailer.sendMail({
-    from: `"${process.env.SMTP_FROM_NAME || "Veloces"}" <${process.env.SMTP_FROM}>`,
-    to: email,
-    subject: "Your Veloces verification code",
-    text: `Your Veloces verification code is ${otp}. It expires in 5 minutes.`,
-    html: `
-      <div style="font-family:Arial,sans-serif">
-        <h2>Veloces</h2>
-        <p>Your verification code is:</p>
-        <h1 style="letter-spacing:6px">${otp}</h1>
-        <p>This code expires in 5 minutes.</p>
-        <p>If you did not request this code, you can ignore this email.</p>
-      </div>
-    `
-  });
-}
+  if (!process.env.BREVO_API_KEY) {
+    throw new Error("BREVO_API_KEY is not configured");
+  }
 
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "api-key": process.env.BREVO_API_KEY,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      sender: {
+        name: process.env.SMTP_FROM_NAME || "Veloces",
+        email: process.env.SMTP_FROM
+      },
+      to: [
+        {
+          email: email
+        }
+      ],
+      subject: "Your Veloces verification code",
+      textContent: `Your Veloces verification code is ${otp}. It expires in 5 minutes.`,
+      htmlContent: `
+        <div style="font-family:Arial,sans-serif">
+          <h2>Veloces</h2>
+          <p>Your verification code is:</p>
+          <h1 style="letter-spacing:6px">${otp}</h1>
+          <p>This code expires in 5 minutes.</p>
+          <p>If you did not request this code, you can ignore this email.</p>
+        </div>
+      `
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error("Brevo API error:", response.status, detail);
+    throw new Error("Brevo email API request failed");
+  }
+}
 function tokenFor(user) {
   return jwt.sign({ id: user.id, role: user.role, email: user.email },
     process.env.JWT_SECRET, { expiresIn: "8h" });
