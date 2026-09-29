@@ -74,21 +74,62 @@ app.get("/api/health", async (_req,res) => {
   catch(e){ res.status(503).json({ok:false, database:false}); }
 });
 
-app.post("/api/auth/register", async (req,res) => {
-  const {name,email,password,role="STUDENT"} = req.body;
-  if (!name || !email || !password) return res.status(400).json({error:"Name, email and password are required"});
-  const safeRole = role === "ADMIN" ? "ADMIN" : "STUDENT";
-  if (safeRole === "ADMIN") return res.status(403).json({error:"Admin accounts can only be created by an existing admin"});
-  try {
-    const [exists] = await pool.execute("SELECT id FROM users WHERE email=?", [email.toLowerCase()]);
-    if (exists.length) return res.status(409).json({error:"Email is already registered"});
-    const hash = await bcrypt.hash(password,12);
-    const [r] = await pool.execute("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'STUDENT')",
-      [name,email.toLowerCase(),hash]);
-    res.json({id:r.insertId,message:"Student account created"});
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
+app.post("/api/auth/register", async (req,res)=>{
+  const {name,email,password}=req.body;
 
+  if(!name||!email||!password){
+    return res.status(400).json({error:"All fields are required"});
+  }
+
+  const normalizedEmail=email.trim().toLowerCase();
+
+  try {
+    const [exists]=await pool.query(
+      "SELECT id FROM users WHERE email=?",
+      [normalizedEmail]
+    );
+
+    if(exists.length){
+      return res.status(409).json({error:"Email already registered"});
+    }
+
+    const passwordHash=await bcrypt.hash(password,12);
+    const otp=generateOtp();
+    const otpHash=hashOtp(otp);
+
+    await pool.query(
+      "UPDATE otp_codes SET used=1 WHERE email=? AND purpose='REGISTER' AND used=0",
+      [normalizedEmail]
+    );
+
+    await pool.query(
+      `INSERT INTO otp_codes
+       (name,email,password_hash,otp_hash,purpose,expires_at)
+       VALUES (?,?,?,?, 'REGISTER', DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+      [name.trim(),normalizedEmail,passwordHash,otpHash]
+    );
+
+    try {
+      await sendOtpEmail(normalizedEmail,otp);
+    } catch(emailError) {
+      await pool.query(
+        "UPDATE otp_codes SET used=1 WHERE email=? AND purpose='REGISTER' AND used=0",
+        [normalizedEmail]
+      );
+      console.error("OTP email failed:",emailError);
+      return res.status(500).json({error:"Unable to send verification email"});
+    }
+
+    res.json({
+      requiresOtp:true,
+      email:normalizedEmail
+    });
+
+  } catch(e) {
+    console.error("Registration error:",e);
+    res.status(500).json({error:"Registration failed"});
+  }
+});
 app.post("/api/auth/login", async (req,res) => {
   const {email,password,role} = req.body;
   const [rows] = await pool.execute("SELECT * FROM users WHERE email=?", [String(email||"").toLowerCase()]);
