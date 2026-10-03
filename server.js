@@ -464,11 +464,11 @@ Return this exact JSON structure:
 `;
 
        const models=[
-      model,
-      "gemini-3.7-flash",
-      "gemini-3.6-flash"
-    ].filter((value,index,array)=>array.indexOf(value)===index);
-
+  model,
+  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash"
+].filter((value,index,array)=>array.indexOf(value)===index);
+    
     let response=null;
     let lastStatus=0;
     let lastDetail="";
