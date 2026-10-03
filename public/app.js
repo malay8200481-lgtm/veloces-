@@ -3,8 +3,27 @@ let me=null;
 async function boot(){try{me=await api("/api/auth/me");showApp();load("dashboard")}catch{showLogin()}}
 function showLogin(){$("#login").classList.remove("hidden");$("#app").classList.add("hidden");$("#logout").classList.add("hidden")}
 function showApp(){$("#login").classList.add("hidden");$("#app").classList.remove("hidden");$("#logout").classList.remove("hidden");document.querySelectorAll(".adminOnly").forEach(x=>x.style.display=me.role==="ADMIN"?"":"none")}
-$("#loginForm").onsubmit=async e=>{e.preventDefault();try{me=(await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("#email").value,password:$("#password").value,role:$("#role").value})})).user;showApp();load("dashboard")}catch(x){$("#loginMsg").textContent=x.message}};
-$("#signupForm").onsubmit=async e=>{
+$("#loginForm").onsubmit=async(e)=>{
+  e.preventDefault();
+
+  try{
+    const result=await api("/api/auth/login",{
+      method:"POST",
+      body:JSON.stringify({
+        email:$("#email").value,
+        password:$("#password").value,
+        role:$("#role").value
+      })
+    });
+
+    me=result.user;
+    showApp();
+    load("dashboard");
+
+  }catch(x){
+    $("#loginMsg").textContent=x.message;
+  }
+};
   e.preventDefault();
 
   try{
