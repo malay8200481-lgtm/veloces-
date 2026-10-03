@@ -463,29 +463,73 @@ Return this exact JSON structure:
 }
 `;
 
-    const response=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-          contents:[
-            {
-              parts:[
+       const models=[
+      model,
+      "gemini-3.7-flash",
+      "gemini-3.6-flash"
+    ].filter((value,index,array)=>array.indexOf(value)===index);
+
+    let response=null;
+    let lastStatus=0;
+    let lastDetail="";
+
+    for(const currentModel of models){
+      for(let attempt=1;attempt<=2;attempt++){
+
+        response=await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          {
+            method:"POST",
+            headers:{
+              "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+              contents:[
                 {
-                  text:prompt
+                  parts:[
+                    {
+                      text:prompt
+                    }
+                  ]
                 }
-              ]
-            }
-          ],
-          generationConfig:{
-            responseMimeType:"application/json"
+              ],
+              generationConfig:{
+                responseMimeType:"application/json"
+              }
+            })
           }
-        })
+        );
+
+        if(response.ok){
+          break;
+        }
+
+        lastStatus=response.status;
+        lastDetail=await response.text();
+
+        console.error(
+          `Gemini error using ${currentModel}, attempt ${attempt}:`,
+          lastStatus,
+          lastDetail
+        );
+
+        if(response.status!==503){
+          break;
+        }
+
+        await new Promise(resolve=>setTimeout(resolve,1500));
       }
-    );
+
+      if(response && response.ok){
+        break;
+      }
+    }
+
+    if(!response || !response.ok){
+      return res.status(500).json({
+        error:`Gemini AI is temporarily unavailable. Please try again in a moment. (${lastStatus})`
+      });
+    }
 
     if(!response.ok){
       const detail=await response.text();
