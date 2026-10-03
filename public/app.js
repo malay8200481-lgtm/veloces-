@@ -100,7 +100,7 @@ async function exams(p){
 
     ${
       !x.published
-      ? `<button class="danger" onclick="deleteExam(${x.id})">
+      ? `<button class="danger" onclick="deleteDraftExam(${x.id})"
           Delete
         </button>`
       : ""
