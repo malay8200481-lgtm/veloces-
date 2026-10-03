@@ -220,13 +220,10 @@ window.openExamBuilder=async(id)=>{
     ✨ AI Generate
   </button>
 
-  ${
-    !exam.published
-      ? `<button onclick="publishExam(${id})">
-          🚀 Publish Exam
-        </button>`
-      : `<span class="badge">PUBLISHED</span>`
-  }
+  ${!exam.published
+  ? '<button onclick="publishExam(' + id + ')">🚀 Publish Exam</button>'
+  : '<span class="badge">PUBLISHED</span>'
+}
 </div>
       </div>
 
