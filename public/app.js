@@ -1269,36 +1269,14 @@ async function results(p){
 /* =========================
    ATTENDANCE
 ========================= */
-
 async function attendance(p){
 
-  const r=
-    await api("/api/attendance");
+  const r = await api("/api/attendance");
 
-  let h=`
+  let h = `
     <div class="card panel">
 
       <h2>Attendance</h2>
-
-      ${
-        me.role==="ADMIN"
-
-        ?
-
-        `
-          <div class="notice">
-            Use the API endpoint
-            <code>POST /api/attendance</code>
-            to mark each student present/absent.
-            The schema enforces one record per
-            student/date.
-          </div>
-        `
-
-        :
-
-        ""
-      }
 
       <table class="table">
 
@@ -1306,33 +1284,38 @@ async function attendance(p){
           <th>Date</th>
 
           ${
-            me.role==="ADMIN"
+            me.role === "ADMIN"
             ? "<th>Student</th>"
             : ""
           }
 
           <th>Status</th>
+
+          ${
+            me.role === "ADMIN"
+            ? "<th>Action</th>"
+            : ""
+          }
         </tr>
   `;
 
-  r.forEach(x=>{
+  r.forEach(x => {
 
-    h+=`
+    h += `
       <tr>
 
         <td>
           ${esc(
-            x.attendance_date
-            ?.slice(0,10)||""
+            x.attendance_date?.slice(0,10) || ""
           )}
         </td>
 
         ${
-          me.role==="ADMIN"
+          me.role === "ADMIN"
           ?
           `
             <td>
-              ${esc(x.name)}
+              ${esc(x.name || "")}
             </td>
           `
           :
@@ -1340,22 +1323,87 @@ async function attendance(p){
         }
 
         <td>
-          ${esc(x.status)}
+          ${esc(x.status || "")}
         </td>
+
+        ${
+          me.role === "ADMIN"
+          ?
+          `
+            <td>
+
+              <button
+                class="btn"
+                onclick="markAttendance(
+                  ${x.student_id},
+                  '${x.attendance_date?.slice(0,10) || ""}',
+                  'PRESENT'
+                )"
+              >
+                Present
+              </button>
+
+              <button
+                class="btn"
+                onclick="markAttendance(
+                  ${x.student_id},
+                  '${x.attendance_date?.slice(0,10) || ""}',
+                  'ABSENT'
+                )"
+              >
+                Absent
+              </button>
+
+            </td>
+          `
+          :
+          ""
+        }
 
       </tr>
     `;
   });
 
-  h+=`
+  h += `
       </table>
 
     </div>
   `;
 
-  p.innerHTML=h;
+  p.innerHTML = h;
 }
 
+async function markAttendance(studentId, date, status){
+
+  try{
+
+    await api("/api/attendance",{
+      method:"POST",
+      body:JSON.stringify({
+        student_id:studentId,
+        attendance_date:date,
+        status:status
+      })
+    });
+
+    alert(
+      status === "PRESENT"
+      ? "Student marked Present."
+      : "Student marked Absent."
+    );
+
+    const page = document.querySelector("#page");
+
+    if(page){
+      await attendance(page);
+    }
+
+  }catch(x){
+
+    alert(x.message);
+
+  }
+}
 
 /* =========================
    TIMETABLE
