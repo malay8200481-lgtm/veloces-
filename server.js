@@ -373,6 +373,214 @@ app.delete("/api/exams/:id",auth,admin,async(req,res)=>{
 
   res.json({ok:true});
 });
+app.post("/api/exams/:id/ai-generate",auth,admin,async(req,res)=>{
+  try{
+    const {topic,count=10,difficulty="MEDIUM"}=req.body;
+
+    if(!topic || !topic.trim()){
+      return res.status(400).json({error:"Topic is required"});
+    }
+
+    const questionCount=Number(count);
+
+    if(!Number.isInteger(questionCount) || questionCount<1 || questionCount>50){
+      return res.status(400).json({
+        error:"Question count must be between 1 and 50"
+      });
+    }
+
+    const level=String(difficulty).toUpperCase();
+
+    if(!["EASY","MEDIUM","HARD"].includes(level)){
+      return res.status(400).json({
+        error:"Invalid difficulty"
+      });
+    }
+
+    if(!process.env.GEMINI_API_KEY){
+      return res.status(500).json({
+        error:"GEMINI_API_KEY is not configured"
+      });
+    }
+
+    const [examRows]=await pool.execute(
+      "SELECT id,published FROM exams WHERE id=?",
+      [req.params.id]
+    );
+
+    if(!examRows.length){
+      return res.status(404).json({
+        error:"Exam not found"
+      });
+    }
+
+    if(examRows[0].published){
+      return res.status(400).json({
+        error:"Published exams cannot be modified"
+      });
+    }
+
+    const model=process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+    const prompt=`
+You are an expert exam question generator.
+
+Create exactly ${questionCount} multiple-choice questions.
+
+Topic:
+${topic.trim()}
+
+Difficulty:
+${level}
+
+Rules:
+- Every question must be relevant to the topic.
+- Every question must have exactly 4 answer options.
+- Only ONE option can be correct.
+- The correct_answer must exactly match one of the four options.
+- Questions must be clear and suitable for an online test.
+- Do not repeat questions.
+- Return ONLY valid JSON.
+- Do not use markdown.
+- Do not include explanations.
+
+Return this exact JSON structure:
+
+{
+  "questions": [
+    {
+      "question_text": "Question here",
+      "options": [
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D"
+      ],
+      "correct_answer": "Option A",
+      "points": 1
+    }
+  ]
+}
+`;
+
+    const response=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          contents:[
+            {
+              parts:[
+                {
+                  text:prompt
+                }
+              ]
+            }
+          ],
+          generationConfig:{
+            responseMimeType:"application/json"
+          }
+        })
+      }
+    );
+
+    if(!response.ok){
+      const detail=await response.text();
+      console.error("Gemini API error:",response.status,detail);
+
+      return res.status(500).json({
+        error:"Gemini AI request failed"
+      });
+    }
+
+    const data=await response.json();
+
+    const text=data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if(!text){
+      return res.status(500).json({
+        error:"Gemini returned no questions"
+      });
+    }
+
+    let generated;
+
+    try{
+      generated=JSON.parse(text);
+    }catch{
+      const cleaned=text
+        .replace(/^```json\s*/i,"")
+        .replace(/^```\s*/i,"")
+        .replace(/\s*```$/,"")
+        .trim();
+
+      generated=JSON.parse(cleaned);
+    }
+
+    if(!generated.questions || !Array.isArray(generated.questions)){
+      return res.status(500).json({
+        error:"Invalid question data returned by Gemini"
+      });
+    }
+
+    let added=0;
+
+    for(const q of generated.questions){
+
+      if(
+        !q.question_text ||
+        !Array.isArray(q.options) ||
+        q.options.length!==4 ||
+        !q.correct_answer
+      ){
+        continue;
+      }
+
+      if(!q.options.includes(q.correct_answer)){
+        continue;
+      }
+
+      await pool.execute(
+        `INSERT INTO questions
+        (exam_id,question_text,type,difficulty,options_json,correct_answer,points,sort_order)
+        VALUES(?,?,?,?,?,?,?,?)`,
+        [
+          req.params.id,
+          String(q.question_text).trim(),
+          "MCQ",
+          level,
+          JSON.stringify(q.options),
+          String(q.correct_answer),
+          Number(q.points)||1,
+          added
+        ]
+      );
+
+      added++;
+    }
+
+    if(added===0){
+      return res.status(500).json({
+        error:"Gemini did not generate valid questions"
+      });
+    }
+
+    res.json({
+      ok:true,
+      added
+    });
+
+  }catch(err){
+    console.error("AI generation error:",err);
+
+    res.status(500).json({
+      error:err.message || "AI question generation failed"
+    });
+  }
+});
 app.post("/api/exams/:id/questions",auth,admin,async(req,res)=>{
   const {question_text,type,difficulty,options,correct_answer,points=1,sort_order=0,test_cases=[]}=req.body;
   const [r]=await pool.execute("INSERT INTO questions(exam_id,question_text,type,difficulty,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?,?)",
