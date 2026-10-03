@@ -488,6 +488,24 @@ window.generateAIQuestions=async(examId)=>{
     alert(err.message);
   }
 };
+window.publishExam=async(examId)=>{
+  if(!confirm("Are you sure you want to publish this exam? Students will be able to see it.")){
+    return;
+  }
+
+  try{
+    await api(`/api/exams/${examId}/publish`,{
+      method:"POST"
+    });
+
+    alert("Exam published successfully!");
+
+    await openExamBuilder(examId);
+
+  }catch(err){
+    alert(err.message);
+  }
+};
 window.startExam=async id=>{const s=await api(`/api/exams/${id}/start`,{method:"POST"});alert("Exam started. Submission ID: "+s.submission_id);openExam(id,s.submission_id)};
 async function openExam(id,sid){const qs=await api(`/api/exams/${id}/questions`);const m=document.createElement("div");m.className="modal";m.innerHTML=`<div><div class="row"><h2>Exam</h2><button onclick="this.closest('.modal').remove()">Close</button></div><p class="muted">Monitoring events are recorded while this session is active.</p>${qs.map((q,i)=>`<div class="question"><b>Q${i+1}. ${q.question_text}</b>${q.type==="MCQ"?(q.options_json||[]).map(o=>`<label class="option"><input type="radio" name="q${q.id}" value="${String(o).replaceAll('"','&quot;')}"> ${o}</label>`).join(""):`<textarea class="code" id="code${q.id}" placeholder="// Write your solution here"></textarea>`}<button onclick="saveAnswer(${sid},${q.id},'${q.type}')">Save answer</button></div>`).join("")}<button class="danger" onclick="submitExam(${sid})">Submit Exam</button></div>`;document.body.appendChild(m);document.documentElement.requestFullscreen?.().catch(()=>{});document.addEventListener("visibilitychange",()=>{if(document.hidden)api(`/api/submissions/${sid}/violation`,{method:"POST",body:JSON.stringify({type:"TAB_HIDDEN",severity:"HIGH",details:"Page became hidden"})}).catch(()=>{})},{once:false})}
 window.saveAnswer=async(sid,qid,type)=>{let a=type==="MCQ"?document.querySelector(`input[name="q${qid}"]:checked`)?.value:document.querySelector(`#code${qid}`).value;if(a===undefined)return alert("Select/write an answer");await api(`/api/submissions/${sid}/answer`,{method:"POST",body:JSON.stringify({question_id:qid,answer_text:a})});alert("Saved")};
