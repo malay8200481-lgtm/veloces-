@@ -211,9 +211,15 @@ window.openExamBuilder=async(id)=>{
           </div>
         </div>
 
-        <button onclick="document.getElementById('qbText').focus()">
-        + Add Question
-        </button>
+        <div class="row">
+  <button onclick="document.getElementById('qbText').focus()">
+    + Add Question
+  </button>
+
+  <button onclick="generateAIQuestions(${id})">
+    ✨ AI Generate
+  </button>
+</div>
       </div>
 
       <hr>
@@ -425,6 +431,56 @@ window.addBuilderQuestion=async(examId)=>{
 
   await openExamBuilder(examId);
 };
+
+window.generateAIQuestions=async(examId)=>{
+  const topic=prompt(
+    "What topic should the AI exam questions cover?"
+  );
+
+  if(!topic || !topic.trim())return;
+
+  const count=Number(
+    prompt("How many questions should AI generate?","10")
+  );
+
+  if(!count || count<1 || count>50){
+    alert("Please enter a number between 1 and 50.");
+    return;
+  }
+
+  const difficulty=(
+    prompt(
+      "Difficulty: EASY / MEDIUM / HARD",
+      "MEDIUM"
+    )||"MEDIUM"
+  ).toUpperCase();
+
+  if(!["EASY","MEDIUM","HARD"].includes(difficulty)){
+    alert("Invalid difficulty.");
+    return;
+  }
+
+  try{
+    alert("AI is generating your questions. Please wait...");
+
+    await api(`/api/exams/${examId}/ai-generate`,{
+      method:"POST",
+      body:JSON.stringify({
+        topic:topic.trim(),
+        count,
+        difficulty
+      })
+    });
+
+    alert("AI questions generated successfully.");
+
+    await openExamBuilder(examId);
+
+  }catch(err){
+    alert(err.message);
+  }
+};
+window.startExam=async id=>{
 window.startExam=async id=>{const s=await api(`/api/exams/${id}/start`,{method:"POST"});alert("Exam started. Submission ID: "+s.submission_id);openExam(id,s.submission_id)};
 async function openExam(id,sid){const qs=await api(`/api/exams/${id}/questions`);const m=document.createElement("div");m.className="modal";m.innerHTML=`<div><div class="row"><h2>Exam</h2><button onclick="this.closest('.modal').remove()">Close</button></div><p class="muted">Monitoring events are recorded while this session is active.</p>${qs.map((q,i)=>`<div class="question"><b>Q${i+1}. ${q.question_text}</b>${q.type==="MCQ"?(q.options_json||[]).map(o=>`<label class="option"><input type="radio" name="q${q.id}" value="${String(o).replaceAll('"','&quot;')}"> ${o}</label>`).join(""):`<textarea class="code" id="code${q.id}" placeholder="// Write your solution here"></textarea>`}<button onclick="saveAnswer(${sid},${q.id},'${q.type}')">Save answer</button></div>`).join("")}<button class="danger" onclick="submitExam(${sid})">Submit Exam</button></div>`;document.body.appendChild(m);document.documentElement.requestFullscreen?.().catch(()=>{});document.addEventListener("visibilitychange",()=>{if(document.hidden)api(`/api/submissions/${sid}/violation`,{method:"POST",body:JSON.stringify({type:"TAB_HIDDEN",severity:"HIGH",details:"Page became hidden"})}).catch(()=>{})},{once:false})}
 window.saveAnswer=async(sid,qid,type)=>{let a=type==="MCQ"?document.querySelector(`input[name="q${qid}"]:checked`)?.value:document.querySelector(`#code${qid}`).value;if(a===undefined)return alert("Select/write an answer");await api(`/api/submissions/${sid}/answer`,{method:"POST",body:JSON.stringify({question_id:qid,answer_text:a})});alert("Saved")};
