@@ -588,9 +588,23 @@ app.post("/api/exams/:id/questions",auth,admin,async(req,res)=>{
   for(const tc of test_cases) await pool.execute("INSERT INTO test_cases(question_id,input_text,expected_output) VALUES(?,?,?)",[r.insertId,tc.input_text||"",tc.expected_output||""]);
   res.json({id:r.insertId});
 });
+function parseOptions(value){
+  if(!value)return null;
+
+  if(Array.isArray(value))return value;
+
+  try{
+    return JSON.parse(value);
+  }catch{
+    return String(value)
+      .split(",")
+      .map(x=>x.trim())
+      .filter(Boolean);
+  }
+}
 app.get("/api/exams/:id/questions",auth,async(req,res)=>{
   const [r]=await pool.execute("SELECT id,exam_id,question_text,type,difficulty,options_json,points,sort_order FROM questions WHERE exam_id=? ORDER BY sort_order,id",[req.params.id]);
-  res.json(r.map(x=>({...x,options_json:x.options_json?JSON.parse(x.options_json):null})));
+  res.json(r.map(x=>({...x,options_json:parseOptions(x.options_json)})));
 });
 
 app.post("/api/exams/:id/start",auth,async(req,res)=>{
