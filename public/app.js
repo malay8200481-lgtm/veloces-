@@ -525,7 +525,91 @@ window.deleteDraftExam=async(examId)=>{
   }
 };
 window.startExam=async id=>{const s=await api(`/api/exams/${id}/start`,{method:"POST"});alert("Exam started. Submission ID: "+s.submission_id);openExam(id,s.submission_id)};
-async function openExam(id,sid){const qs=await api(`/api/exams/${id}/questions`);const m=document.createElement("div");m.className="modal";m.innerHTML=`<div><div class="row"><h2>Exam</h2><button onclick="this.closest('.modal').remove()">Close</button></div><p class="muted">Monitoring events are recorded while this session is active.</p>${qs.map((q,i)=>`<div class="question"><b>Q${i+1}. ${q.question_text}</b>${q.type==="MCQ"?(q.options_json||[]).map(o=>`<label class="option"><input type="radio" name="q${q.id}" value="${String(o).replaceAll('"','&quot;')}"> ${o}</label>`).join(""):`<textarea class="code" id="code${q.id}" placeholder="// Write your solution here"></textarea>`}<button onclick="saveAnswer(${sid},${q.id},'${q.type}')">Save answer</button></div>`).join("")}<button class="danger" onclick="submitExam(${sid})">Submit Exam</button></div>`;document.body.appendChild(m);document.documentElement.requestFullscreen?.().catch(()=>{});document.addEventListener("visibilitychange",()=>{if(document.hidden)api(`/api/submissions/${sid}/violation`,{method:"POST",body:JSON.stringify({type:"TAB_HIDDEN",severity:"HIGH",details:"Page became hidden"})}).catch(()=>{})},{once:false})}
+async function openExam(id,sid){
+  const qs=await api(`/api/exams/${id}/questions`);
+
+  const m=document.createElement("div");
+  m.className="modal";
+
+  let html=`
+    <div>
+      <div class="row">
+        <h2>Exam</h2>
+        <button onclick="this.closest('.modal').remove()">Close</button>
+      </div>
+
+      <p class="muted">
+        Monitoring events are recorded while this session is active.
+      </p>
+  `;
+
+  qs.forEach((q,i)=>{
+    html+=`
+      <div class="question">
+        <b>Q${i+1}. ${q.question_text}</b>
+    `;
+
+    if(q.type==="MCQ"){
+      (q.options_json||[]).forEach(o=>{
+        html+=`
+          <label class="option">
+            <input
+              type="radio"
+              name="q${q.id}"
+              value="${String(o).replaceAll('"','&quot;')}"
+            >
+            ${o}
+          </label>
+        `;
+      });
+    }else{
+      html+=`
+        <textarea
+          class="code"
+          id="code${q.id}"
+          placeholder="// Write your solution here"
+        ></textarea>
+      `;
+    }
+
+    html+=`
+        <button onclick="saveAnswer(${sid},${q.id},'${q.type}')">
+          Save answer
+        </button>
+      </div>
+    `;
+  });
+
+  html+=`
+      <button class="danger" onclick="submitExam(${sid})">
+        Submit Exam
+      </button>
+    </div>
+  `;
+
+  m.innerHTML=html;
+
+  document.body.appendChild(m);
+
+  document.documentElement.requestFullscreen?.().catch(()=>{});
+
+  document.addEventListener(
+    "visibilitychange",
+    ()=>{
+      if(document.hidden){
+        api(`/api/submissions/${sid}/violation`,{
+          method:"POST",
+          body:JSON.stringify({
+            type:"TAB_HIDDEN",
+            severity:"HIGH",
+            details:"Page became hidden"
+          })
+        }).catch(()=>{});
+      }
+    },
+    {once:false}
+  );
+}
 window.saveAnswer=async(sid,qid,type)=>{let a=type==="MCQ"?document.querySelector(`input[name="q${qid}"]:checked`)?.value:document.querySelector(`#code${qid}`).value;if(a===undefined)return alert("Select/write an answer");await api(`/api/submissions/${sid}/answer`,{method:"POST",body:JSON.stringify({question_id:qid,answer_text:a})});alert("Saved")};
 window.submitExam=async sid=>{const r=await api(`/api/submissions/${sid}/submit`,{method:"POST"});alert("Submitted. Score: "+r.score);document.querySelector(".modal")?.remove();document.exitFullscreen?.().catch(()=>{});load("results")};
 async function results(p){const r=await api("/api/results");p.innerHTML=`<div class="card panel"><h2>Results</h2><table class="table"><tr><th>Exam</th>${me.role==="ADMIN"?"<th>Student</th>":""}<th>Score</th><th>Status</th><th>Submitted</th></tr>${r.map(x=>`<tr><td>${x.title}</td>${me.role==="ADMIN"?`<td>${x.name}<br><span class="muted">${x.email}</span></td>`:""}<td>${x.score}</td><td>${x.status}</td><td>${x.submitted_at||"—"}</td></tr>`).join("")}</table></div>`}
