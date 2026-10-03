@@ -99,12 +99,12 @@ async function exams(p){
     </button>
 
     ${
-      !x.published
-      ? `<button class="danger" onclick="deleteDraftExam(${x.id})"
-          Delete
-        </button>`
-      : ""
-    }`
+  !x.published
+  ? `<button class="danger" onclick="deleteDraftExam(${x.id})">
+      Delete
+    </button>`
+  : ""
+}
             : `<button onclick="startExam(${x.id})">Start</button>`
           }
         </div>
@@ -501,6 +501,24 @@ window.publishExam=async(examId)=>{
     alert("Exam published successfully!");
 
     await openExamBuilder(examId);
+
+  }catch(err){
+    alert(err.message);
+  }
+};
+window.deleteDraftExam=async(examId)=>{
+  if(!confirm("Delete this draft exam and all its questions? This cannot be undone.")){
+    return;
+  }
+
+  try{
+    await api(`/api/exams/${examId}`,{
+      method:"DELETE"
+    });
+
+    alert("Draft exam deleted successfully.");
+
+    await load("exams");
 
   }catch(err){
     alert(err.message);
