@@ -211,7 +211,9 @@ window.openExamBuilder=async(id)=>{
           </div>
         </div>
 
-        <button onclick="load('exams')">← Back</button>
+        <button onclick="document.getElementById('qbText').focus()">
+        + Add Question
+        </button>
       </div>
 
       <hr>
@@ -318,10 +320,15 @@ window.openExamBuilder=async(id)=>{
       <br>
 
       <button onclick="addBuilderQuestion(${id})">
-        + Add Question
-      </button>
+  + Add Question
+</button>
 
-    </div>
+<br><br>
+
+<button onclick="load('exams')">
+  ← Back to Exams
+</button>
+<br><br>
   `;
 
   p.innerHTML=h;
