@@ -365,112 +365,57 @@ function esc(v){
    CREATE EXAM
 ========================= */
 
-window.newExam=async()=>{
-  if(me.role!=="ADMIN")return;
+window.newExam = async () => {
+  if (me.role !== "ADMIN") return;
 
-  const choice=prompt(
-`Create Exam
+  const title = prompt("Exam title");
+  if (!title || !title.trim()) return;
 
-Type 1 for Manual Exam
-Type 2 for AI Generated Exam`,
-    "1"
-  );
-
-  if(choice==="2"){
-
-    const title=prompt("Exam title");
-    if(!title)return;
-
-    const description=prompt(
-      "Exam description",
-      ""
-    );
-
-    const difficulty=(
-      prompt(
-        "Difficulty: EASY / MEDIUM / HARD",
-        "MEDIUM"
-      )||"MEDIUM"
-    ).toUpperCase();
-
-    const duration=Number(
-      prompt(
-        "Duration in minutes",
-        "60"
-      )
-    );
-
-    if(!duration || duration<1){
-      alert("Please enter a valid duration.");
-      return;
-    }
-
-    const result=await api("/api/exams",{
-      method:"POST",
-      body:JSON.stringify({
-        title,
-        description,
-        difficulty,
-        duration_minutes:duration,
-        coding_enabled:false,
-        published:false
-      })
-    });
-
-    await openExamBuilder(result.id);
-
-    alert(
-      "Exam created. Click AI Generate to generate questions."
-    );
-
-    return;
-  }
-
-  if(choice!=="1")return;
-
-  const title=prompt("Exam title");
-
-  if(!title)return;
-
-  const description=prompt(
+  const description = prompt(
     "Exam description",
     ""
   );
 
-  const difficulty=(
+  const difficulty = (
     prompt(
       "Difficulty: EASY / MEDIUM / HARD",
       "MEDIUM"
-    )||"MEDIUM"
+    ) || "MEDIUM"
   ).toUpperCase();
 
-  const duration=Number(
+  const duration = Number(
     prompt(
       "Duration in minutes",
       "60"
     )
   );
 
-  if(!duration || duration<1){
+  if (!duration || duration < 1) {
     alert("Please enter a valid duration.");
     return;
   }
 
-  const result=await api("/api/exams",{
-    method:"POST",
-    body:JSON.stringify({
-      title,
-      description,
+  const result = await api("/api/exams", {
+    method: "POST",
+    body: JSON.stringify({
+      title: title.trim(),
+      description: description || "",
       difficulty,
-      duration_minutes:duration,
-      coding_enabled:false,
-      published:false
+      duration_minutes: duration,
+      coding_enabled: false,
+      published: false
     })
   });
 
+  if (!result.id) {
+    alert("Exam was created, but could not open the builder.");
+    return;
+  }
+
+  state.examId = result.id;
+
   await openExamBuilder(result.id);
 };
-
 
 /* =========================
    EXAM BUILDER
