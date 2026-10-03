@@ -373,6 +373,56 @@ app.delete("/api/exams/:id",auth,admin,async(req,res)=>{
 
   res.json({ok:true});
 });
+app.post("/api/exams/:id/publish",auth,admin,async(req,res)=>{
+  try{
+    const examId=req.params.id;
+
+    const [examRows]=await pool.execute(
+      "SELECT id,title,published FROM exams WHERE id=? AND created_by=?",
+      [examId,req.user.id]
+    );
+
+    if(!examRows.length){
+      return res.status(404).json({
+        error:"Exam not found"
+      });
+    }
+
+    if(examRows[0].published){
+      return res.status(400).json({
+        error:"Exam is already published"
+      });
+    }
+
+    const [questionRows]=await pool.execute(
+      "SELECT COUNT(*) AS total FROM questions WHERE exam_id=?",
+      [examId]
+    );
+
+    if(Number(questionRows[0].total)<1){
+      return res.status(400).json({
+        error:"Add at least one question before publishing"
+      });
+    }
+
+    await pool.execute(
+      "UPDATE exams SET published=1 WHERE id=? AND created_by=?",
+      [examId,req.user.id]
+    );
+
+    res.json({
+      ok:true,
+      message:"Exam published successfully"
+    });
+
+  }catch(err){
+    console.error("Publish exam error:",err);
+
+    res.status(500).json({
+      error:"Failed to publish exam"
+    });
+  }
+});
 app.post("/api/exams/:id/ai-generate",auth,admin,async(req,res)=>{
   try{
     const {topic,count=10,difficulty="MEDIUM"}=req.body;
