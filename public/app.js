@@ -211,7 +211,7 @@ window.openExamBuilder=async(id)=>{
           </div>
         </div>
 
-        <div class="row">
+   <div class="row">
   <button onclick="document.getElementById('qbText').focus()">
     + Add Question
   </button>
@@ -219,6 +219,14 @@ window.openExamBuilder=async(id)=>{
   <button onclick="generateAIQuestions(${id})">
     ✨ AI Generate
   </button>
+
+  ${
+    !exam.published
+      ? `<button onclick="publishExam(${id})">
+          🚀 Publish Exam
+        </button>`
+      : `<span class="badge">PUBLISHED</span>`
+  }
 </div>
       </div>
 
