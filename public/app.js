@@ -1551,10 +1551,9 @@ window.deleteLecture=async id=>{
 
 async function announcements(p){
 
-  const r=
-    await api("/api/announcements");
+  const r = await api("/api/announcements");
 
-  let h=`
+  let h = `
     <div class="card panel">
 
       <div class="row">
@@ -1562,7 +1561,7 @@ async function announcements(p){
         <h2>Announcements</h2>
 
         ${
-          me.role==="ADMIN"
+          me.role === "ADMIN"
           ?
           `
             <button onclick="newAnnouncement()">
@@ -1576,9 +1575,9 @@ async function announcements(p){
       </div>
   `;
 
-  r.forEach(x=>{
+  r.forEach(x => {
 
-    h+=`
+    h += `
       <div class="notice">
 
         <b>
@@ -1593,11 +1592,21 @@ async function announcements(p){
           x.attachment_url
           ?
           `
-            <a
-              href="${esc(x.attachment_url)}"
-              target="_blank">
-              Attachment
-            </a>
+            <div class="row">
+
+              <button
+                class="btn"
+                onclick="previewAttachment('${esc(x.attachment_url)}')">
+                📄 Preview
+              </button>
+
+              <button
+                class="btn"
+                onclick="downloadAttachment('${esc(x.attachment_url)}')">
+                ⬇ Download
+              </button>
+
+            </div>
           `
           :
           ""
@@ -1608,7 +1617,7 @@ async function announcements(p){
         </small>
 
         ${
-          me.role==="ADMIN"
+          me.role === "ADMIN"
           ?
           `
             <br>
@@ -1627,13 +1636,45 @@ async function announcements(p){
     `;
   });
 
-  h+=`
+  h += `
     </div>
   `;
 
-  p.innerHTML=h;
+  p.innerHTML = h;
 }
+window.previewAttachment = (url) => {
 
+  if(!url){
+    alert("Attachment not available.");
+    return;
+  }
+
+  window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+  );
+};
+
+
+window.downloadAttachment = (url) => {
+
+  if(!url){
+    alert("Attachment not available.");
+    return;
+  }
+
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "";
+
+  document.body.appendChild(link);
+
+  link.click();
+
+  document.body.removeChild(link);
+};
 
 window.newAnnouncement=async()=>{
 
