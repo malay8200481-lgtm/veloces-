@@ -1644,38 +1644,39 @@ async function announcements(p){
 }
 window.previewAttachment = (url) => {
 
-  if(!url){
+  if (!url) {
     alert("Attachment not available.");
     return;
   }
 
-  window.open(
-    url,
-    "_blank",
-    "noopener,noreferrer"
-  );
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 };
 
 
 window.downloadAttachment = (url) => {
 
-  if(!url){
+  if (!url) {
     alert("Attachment not available.");
     return;
   }
 
-  const link = document.createElement("a");
+  const a = document.createElement("a");
 
-  link.href = url;
-  link.download = "";
+  a.href = url;
+  a.download = "attachment";
 
-  document.body.appendChild(link);
-
-  link.click();
-
-  document.body.removeChild(link);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 };
-
 window.newAnnouncement=async()=>{
 
   const title=
